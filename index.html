@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRスキャンロガー</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* カスタムスタイル: スキャンエリアの視覚化 */
+        #scanner-area {
+            height: 250px;
+            background: #2c3e50;
+            border: 4px solid #3498db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ecf0f1;
+            font-weight: 600;
+            font-size: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8 min-h-screen">
+
+    <div id="app-container" class="max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-6 sm:p-8">
+        
+        <!-- ヘッダー -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-extrabold text-gray-900 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-600 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="12" y1="3" x2="12" y2="21"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                </svg>
+                きもだめし用 QRスキャナー(demo)
+            </h1>
+            <!-- <p id="user-info" class="text-sm text-gray-500 mt-1">認証中...</p> -->
+        </header>
+
+        <!-- スキャン設定エリア (スポット選択) -->
+        <section class="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h2 class="text-xl font-semibold text-blue-800 mb-3">スキャン設定</h2>
+            
+            <label for="spot-select" class="block text-sm font-medium text-gray-700 mb-1">
+                読み取りスポットを選択
+            </label>
+            <select id="spot-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm">
+                <!-- オプションはJSでロードされるが、デフォルトを設定 -->
+                <option value="spot1">スポット1 (受け付け)</option>
+                <option value="spot2">スポット2 (プレショー)</option>
+                <option value="spot3">スポット3 (エレベーター)</option>
+                <option value="spot4">スポット4 (スタート)</option>
+                <option value="spot5">スポット5 (ゴール)</option>
+                <option value="retire">リタイア</option>
+            </select>
+        </section>
+
+        <!-- スキャンエリアとアクションボタン -->
+        <section class="mb-10">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold text-gray-700">カメラプレビュー</span>
+                <button id="camera-toggle" class="flex items-center px-4 py-1.5 rounded-full text-sm font-bold transition-all duration-200 shadow-sm border">
+                    <!-- アイコンはJSで切り替え -->
+                    <span id="camera-icon" class="mr-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M15 10v4M4 7h1.599c.983 0 1.558.468 1.92 1.353l.974 2.292 2.628 6.13a.999.999 0 00.957.531h3.922c.571 0 1.05-.333 1.284-.816l1.242-2.483a.999.999 0 00-.181-1.298l-5.322-5.321a.999.999 0 00-.735-.294H4V7z" /></svg>
+                        <!-- 下のはバツのアイコン -->
+                        <!-- <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg> -->
+                    </span>
+                    <span id="camera-status-text">カメラ停止中</span>
+                </button>
+            </div>
+
+            <div id="scanner-area" class="relative rounded-lg mb-6">
+                <!-- jsQRが使う要素 -->
+                <video id = "camera-video" class = "invisible absolute" playsinline muted autoplay></video>
+                <canvas id = "camera-canvas" class = "absolute"></canvas>
+                <canvas id = "qr-rect-canvas" class = "absolute"></canvas>
+                <!--  -->
+                <!-- <div class="scan-line" id="scan-line"></div> -->
+                <button id="scan-button" class="absolute flex items-center justify-center px-6 py-3 border border-transparent text-lg font-bold rounded-xl shadow-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition ease-in-out duration-150 transform hover:scale-[1.01] active:scale-[0.99]">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M15 10v4M4 7h1.599c.983 0 1.558.468 1.92 1.353l.974 2.292 2.628 6.13a.999.999 0 00.957.531h3.922c.571 0 1.05-.333 1.284-.816l1.242-2.483a.999.999 0 00-.181-1.298l-5.322-5.321a.999.999 0 00-.735-.294H4V7z" />
+                    </svg>
+                    スキャン開始
+                </button>
+            </div>
+
+            <!-- 状態メッセージ -->
+            <div id="status-message" class="mt-4 text-center text-red-500 font-medium hidden"></div>
+            <!-- モーダル代わりのメッセージボックス -->
+            <div id="modal-message" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+                <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-2xl transform transition-all" onclick="event.stopPropagation()">
+                    <h3 class="text-lg font-bold text-gray-900 mb-3" id="modal-title"></h3>
+                    <p class="text-sm text-gray-700 mb-4" id="modal-text"></p>
+                    <div class = "text-center">
+                        <button id = "button-cancel" class="w-2/5 bg-gray-200 text-gray py-2 rounded-md inline-block" onclick="hideMessage()">CANCEL</button>
+                        <button id = "button-ok" class="w-2/5 bg-blue-600 text-white py-2 rounded-md inline-block hover:bg-blue-700 transition" onclick="hideMessage()">OK</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- スキャンログエリア -->
+        <section>
+            <h2 class="text-2xl font-bold text-gray-900 mb-4 border-b pb-2">直前のデータ</h2>
+            <div class="m-4 overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+                <table class="min-w-full divide-y divide-gray-200 bg-white">
+                    <thead class = "bg-white">
+                        <tr>
+                            <th class = "whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-900 uppercase tracking-wider">整理番号</th>
+                            <th class = "whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-900 uppercase tracking-wider">スポット名</th>
+                            <th class = "whitespace-nowrap px-4 py-3 sm:px-6 sm:py-4 text-left text-xs sm:text-sm font-semibold text-gray-900 uppercase tracking-wider">送信時刻</th>
+                        </tr>
+                    </thead>
+                    <tbody class = "divide-y divide-gray-200">
+                        <tr>
+                            <td class = "log-table-cell whitespace-nowrap px-4 py-3 sm:px-6 sm:py-5 text-xs sm:text-sm text-gray-600">-</td>
+                            <td class = "log-table-cell whitespace-nowrap px-4 py-3 sm:px-6 sm:py-5 text-xs sm:text-sm text-gray-600">-</td>
+                            <td class = "log-table-cell whitespace-nowrap px-4 py-3 sm:px-6 sm:py-5 text-xs sm:text-sm text-gray-600">-</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script>
+        const scanButton = document.getElementById('scan-button');
+        const spotSelect = document.getElementById('spot-select');
+        const scanLogList = document.getElementById('scan-log-list');
+        const logTableCell = document.getElementsByClassName("log-table-cell");
+        const cameraToggle = document.getElementById('camera-toggle');
+        const cameraStatusText = document.getElementById('camera-status-text');
+        const cameraIcon = document.getElementById('camera-icon');
+        let isCameraOn = false;
+        const video = document.getElementById("camera-video");
+        const cameraCanvas = document.getElementById("camera-canvas");
+        const cameraCanvasCtx = cameraCanvas.getContext("2d");
+        let idCheckImage, idCanvasUpdate, idTimeout;
+
+        window.showMessage = (title, text, yes = false, no = false) => {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-text').innerText = text;
+            document.getElementById('modal-message').classList.remove('hidden');
+
+            const buttonOK = document.getElementById("button-ok");
+            const buttonCancel = document.getElementById("button-cancel");
+            if(!yes) {
+                buttonOK.classList.add("hidden");
+            } else if (!no) {
+                buttonCancel.classList.add("hidden");
+            }
+
+            return new Promise(resolve => {
+                buttonOK.addEventListener("click", e => resolve(true));
+                buttonCancel.addEventListener("click", e => resolve(false));
+            });
+        };
+
+        window.hideMessage = () => {
+            document.getElementById('modal-message').classList.add('hidden');
+            document.getElementById("button-ok").classList.remove("hidden");
+            document.getElementById("button-cancel").classList.remove("hidden");
+        };
+
+        cameraToggle.addEventListener("click", e => {
+            isCameraOn = !isCameraOn;
+
+            if(isCameraOn) {
+                startCamera();
+                cameraToggle.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+                cameraToggle.classList.add('bg-red-50', 'text-red-600', 'border-red-200');
+                cameraStatusText.textContent = 'カメラを停止';
+                cameraIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>`;
+            } else {
+                stopCamera();
+                cameraToggle.classList.remove('bg-red-50', 'text-red-600', 'border-red-200');
+                cameraToggle.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+                cameraStatusText.textContent = 'カメラ停止中';
+                cameraIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M15 10v4M4 7h1.599c.983 0 1.558.468 1.92 1.353l.974 2.292 2.628 6.13a.999.999 0 00.957.531h3.922c.571 0 1.05-.333 1.284-.816l1.242-2.483a.999.999 0 00-.181-1.298l-5.322-5.321a.999.999 0 00-.735-.294H4V7z" /></svg>`;
+            }
+        });
+
+        scanButton.addEventListener("click", e => cameraToggle.click());
+
+        function startCamera() {
+            let videoWidth, videoHeight;
+            const cameraConfig = {
+                audio: false,
+                video: {
+                    facingMode: "environment",
+                },
+            };
+
+            navigator.mediaDevices.getUserMedia(cameraConfig)
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.onloadeddata = () => {
+                        scanButton.classList.remove("visible");
+                        scanButton.classList.add("invisible");
+                        videoWidth = video.clientWidth;
+                        videoHeight = video.clientHeight;
+                        video.play();
+                        canvasUpdate();
+                        checkImage();
+                        idTimeout = setTimeout(stopCamera, 1000 * 60); // インターバルは1分
+                    }
+                }).catch(e => {
+                    showMessage("ERROR!", "カメラの起動に失敗しました。\n詳しくはコンソールを確認してください。", yes = true);
+                    console.error(e);
+                });
+
+            const canvasUpdate = () => {
+                cameraCanvas.width = videoWidth;
+                cameraCanvas.height = videoHeight;
+                cameraCanvasCtx.drawImage(video, 0, 0, videoWidth, videoHeight);
+                idCanvasUpdate = requestAnimationFrame(canvasUpdate);
+            }
+
+            const checkImage = () => {
+                const image = cameraCanvasCtx.getImageData(0, 0, videoWidth, videoHeight);
+                const code = jsQR(image.data, videoWidth, videoHeight);
+                const spot = spotSelect.value;
+                const date = new Date();
+                const time = `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`;
+
+                if(code) {
+                    clearTimeout(idTimeout);
+                    idTimeout = setTimeout(stopCamera, 1000 * 60);
+
+                    const text = `以下の内容で送信します。よろしいですか？\n\n整理番号: ${code.data}\nスポット: ${spot}`;
+
+                    showMessage("SCAN RESULT", text, yes = true, no = true)
+                        .then(appr => {
+                            console.log(appr);
+                            if(appr) {
+                                console.log("送信");
+                                logTableCell[0].innerText = code.data;
+                                logTableCell[1].innerText = spot;
+                                logTableCell[2].innerText = time;
+                            } else {
+                                console.log("CANCEL");
+                            }
+                        })
+                }
+
+                idCheckImage = requestAnimationFrame(checkImage);
+            }
+        }
+
+        function stopCamera() {
+            cancelAnimationFrame(idCanvasUpdate);
+            cancelAnimationFrame(idCheckImage);
+            video.pause();
+            clearCameraCanvas();
+            scanButton.classList.remove("invisible");
+            scanButton.classList.add("visible");
+        }
+
+        function clearCameraCanvas() {
+            cameraCanvasCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
+            // rectCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
+        }
+
+        /*
+        scanButton.addEventListener('click', () => {
+            const selectedSpot = spotSelect.value;
+            const video = document.getElementById("camera-video");
+            const cameraConfig = {
+                audio: false,
+                video: {
+                    facingMode: "environment",
+                },
+            };
+            let videoWidth, videoHeight;
+            let id_cu, id_ci, id_timeout;
+            const cameraCanvas = document.getElementById("camera-canvas");
+            const cameraCanvasCtx = cameraCanvas.getContext("2d");
+            const rectCanvas = document.getElementById("qr-rect-canvas");
+            const rectCtx = rectCanvas.getContext("2d");
+            
+            const media = navigator.mediaDevices.getUserMedia(cameraConfig)
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.onloadeddata = () => {
+                        scanButton.classList.remove("visible");
+                        scanButton.classList.add("invisible");
+                        videoWidth = video.clientWidth;
+                        videoHeight = video.clientHeight;
+                        video.play();
+                        canvasUpdate();
+                        checkImage();
+                        id_timeout = setTimeout(stopCamera, 1000 * 60); // インターバルは1分
+                    }
+                }).catch(e => {
+                    showMessage("ERROR!", "カメラの起動に失敗しました。\n詳しくはコンソールを確認してください。", yes = true);
+                    console.error(e);
+                });
+            
+            const stopCamera = () => {
+                cancelAnimationFrame(id_cu);
+                cancelAnimationFrame(id_ci);
+                video.pause();
+                clearCameraCanvas();
+                scanButton.classList.remove("invisible");
+                scanButton.classList.add("visible");
+            }
+
+            const clearCameraCanvas = () => {
+                cameraCanvasCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
+                rectCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
+            }
+
+            const restartCamera = () => {
+                id_cu = requestAnimationFrame(canvasUpdate);
+                id_ci = requestAnimationFrame(checkImage);
+                video.play();
+            }
+
+            const canvasUpdate = () => {
+                cameraCanvas.width = videoWidth;
+                cameraCanvas.height = videoHeight;
+                cameraCanvasCtx.drawImage(video, 0, 0, videoWidth, videoHeight);
+                id_cu = requestAnimationFrame(canvasUpdate);
+            }
+
+            const checkImage = () => {
+                const image = cameraCanvasCtx.getImageData(0, 0, videoWidth, videoHeight);
+                const code = jsQR(image.data, videoWidth, videoHeight);
+
+                if(code) {
+                    drawRect(code.location);
+
+                    clearTimeout(id_timeout);
+                    id_timeout = setTimeout(stopCamera, 1000 * 60);
+
+                    const text = `以下の内容で送信します。よろしいですか？\n\n整理番号: ${code.data}\nスポット: ${spotSelect.value}`;
+
+                    showMessage("SCAN RESULT", text, yes = true, no = true)
+                        .then(appr => {
+                            console.log(appr);
+                            if(appr) {
+                                console.log("送信");
+                                clearCameraCanvas();
+                                scanButton.classList.remove("invisible");
+                                scanButton.classList.add("visible");
+                            } else {
+                                console.log("CANCEL");
+                                clearCameraCanvas();
+                                restartCamera();
+                            }
+                        })
+                }
+
+                id_ci = requestAnimationFrame(checkImage);
+            }
+
+            // 四辺形の描画
+            const drawRect = (location) => {
+               rectCanvas.width = video.clientWidth;
+               rectCanvas.height = video.clientHeight;
+               drawLine(location.topLeftCorner, location.topRightCorner);
+               drawLine(location.topRightCorner, location.bottomRightCorner);
+               drawLine(location.bottomRightCorner, location.bottomLeftCorner);
+               drawLine(location.bottomLeftCorner, location.topLeftCorner)
+            }
+
+            // 線の描画
+            const drawLine = (begin, end) => {
+               rectCtx.lineWidth = 4;
+               rectCtx.strokeStyle = "#F00";
+               rectCtx.beginPath();
+               rectCtx.moveTo(begin.x, begin.y);
+               rectCtx.lineTo(end.x, end.y);
+               rectCtx.stroke();
+            }
+
+            // ログアイテムの生成
+            const createLogItemDOM = (QrData, spot, timespamp) => {
+
+            }
+        });
+        */
+    </script>
+</body>
+</html>
