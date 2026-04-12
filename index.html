@@ -44,7 +44,6 @@
                 </svg>
                 きもだめし用 QRスキャナー(demo)
             </h1>
-            <!-- <p id="user-info" class="text-sm text-gray-500 mt-1">認証中...</p> -->
         </header>
 
         <!-- スキャン設定エリア (スポット選択) -->
@@ -195,6 +194,19 @@
 
         scanButton.addEventListener("click", e => cameraToggle.click());
 
+        async function sendData(serialNo, spot, time) {
+            const url = "https://script.google.com/macros/s/AKfycbwtwPj6AJYXcEw0ZsG9Y-pDmmCBS8DaTjjpf1f36MS-RfHRqiB76B0RTspOtnPxNAitdQ/exec"
+
+            await fetch(url, {
+                method: "POST",
+                body: JSON.stringify({
+                  serialNo: serialNo,
+                  spot: spot,
+                  time: time,
+                }),
+            });
+        }
+
         function startCamera() {
             let videoWidth, videoHeight;
             const cameraConfig = {
@@ -229,7 +241,7 @@
                 idCanvasUpdate = requestAnimationFrame(canvasUpdate);
             }
 
-            const checkImage = () => {
+            const checkImage = async () => {
                 const image = cameraCanvasCtx.getImageData(0, 0, videoWidth, videoHeight);
                 const code = jsQR(image.data, videoWidth, videoHeight);
                 const spot = spotSelect.value;
@@ -242,11 +254,13 @@
 
                     const text = `以下の内容で送信します。よろしいですか？\n\n整理番号: ${code.data}\nスポット: ${spot}`;
 
-                    showMessage("SCAN RESULT", text, yes = true, no = true)
+                    await showMessage("SCAN RESULT", text, yes = true, no = true)
                         .then(appr => {
                             console.log(appr);
                             if(appr) {
                                 console.log("送信");
+                                sendData(code.data, spot, time);
+
                                 logTableCell[0].innerText = code.data;
                                 logTableCell[1].innerText = spot;
                                 logTableCell[2].innerText = time;
@@ -273,126 +287,6 @@
             cameraCanvasCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
             // rectCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
         }
-
-        /*
-        scanButton.addEventListener('click', () => {
-            const selectedSpot = spotSelect.value;
-            const video = document.getElementById("camera-video");
-            const cameraConfig = {
-                audio: false,
-                video: {
-                    facingMode: "environment",
-                },
-            };
-            let videoWidth, videoHeight;
-            let id_cu, id_ci, id_timeout;
-            const cameraCanvas = document.getElementById("camera-canvas");
-            const cameraCanvasCtx = cameraCanvas.getContext("2d");
-            const rectCanvas = document.getElementById("qr-rect-canvas");
-            const rectCtx = rectCanvas.getContext("2d");
-            
-            const media = navigator.mediaDevices.getUserMedia(cameraConfig)
-                .then(stream => {
-                    video.srcObject = stream;
-                    video.onloadeddata = () => {
-                        scanButton.classList.remove("visible");
-                        scanButton.classList.add("invisible");
-                        videoWidth = video.clientWidth;
-                        videoHeight = video.clientHeight;
-                        video.play();
-                        canvasUpdate();
-                        checkImage();
-                        id_timeout = setTimeout(stopCamera, 1000 * 60); // インターバルは1分
-                    }
-                }).catch(e => {
-                    showMessage("ERROR!", "カメラの起動に失敗しました。\n詳しくはコンソールを確認してください。", yes = true);
-                    console.error(e);
-                });
-            
-            const stopCamera = () => {
-                cancelAnimationFrame(id_cu);
-                cancelAnimationFrame(id_ci);
-                video.pause();
-                clearCameraCanvas();
-                scanButton.classList.remove("invisible");
-                scanButton.classList.add("visible");
-            }
-
-            const clearCameraCanvas = () => {
-                cameraCanvasCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
-                rectCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
-            }
-
-            const restartCamera = () => {
-                id_cu = requestAnimationFrame(canvasUpdate);
-                id_ci = requestAnimationFrame(checkImage);
-                video.play();
-            }
-
-            const canvasUpdate = () => {
-                cameraCanvas.width = videoWidth;
-                cameraCanvas.height = videoHeight;
-                cameraCanvasCtx.drawImage(video, 0, 0, videoWidth, videoHeight);
-                id_cu = requestAnimationFrame(canvasUpdate);
-            }
-
-            const checkImage = () => {
-                const image = cameraCanvasCtx.getImageData(0, 0, videoWidth, videoHeight);
-                const code = jsQR(image.data, videoWidth, videoHeight);
-
-                if(code) {
-                    drawRect(code.location);
-
-                    clearTimeout(id_timeout);
-                    id_timeout = setTimeout(stopCamera, 1000 * 60);
-
-                    const text = `以下の内容で送信します。よろしいですか？\n\n整理番号: ${code.data}\nスポット: ${spotSelect.value}`;
-
-                    showMessage("SCAN RESULT", text, yes = true, no = true)
-                        .then(appr => {
-                            console.log(appr);
-                            if(appr) {
-                                console.log("送信");
-                                clearCameraCanvas();
-                                scanButton.classList.remove("invisible");
-                                scanButton.classList.add("visible");
-                            } else {
-                                console.log("CANCEL");
-                                clearCameraCanvas();
-                                restartCamera();
-                            }
-                        })
-                }
-
-                id_ci = requestAnimationFrame(checkImage);
-            }
-
-            // 四辺形の描画
-            const drawRect = (location) => {
-               rectCanvas.width = video.clientWidth;
-               rectCanvas.height = video.clientHeight;
-               drawLine(location.topLeftCorner, location.topRightCorner);
-               drawLine(location.topRightCorner, location.bottomRightCorner);
-               drawLine(location.bottomRightCorner, location.bottomLeftCorner);
-               drawLine(location.bottomLeftCorner, location.topLeftCorner)
-            }
-
-            // 線の描画
-            const drawLine = (begin, end) => {
-               rectCtx.lineWidth = 4;
-               rectCtx.strokeStyle = "#F00";
-               rectCtx.beginPath();
-               rectCtx.moveTo(begin.x, begin.y);
-               rectCtx.lineTo(end.x, end.y);
-               rectCtx.stroke();
-            }
-
-            // ログアイテムの生成
-            const createLogItemDOM = (QrData, spot, timespamp) => {
-
-            }
-        });
-        */
     </script>
 </body>
 </html>
