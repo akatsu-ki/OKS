@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRスキャンロガー</title>
+    <title>OKS</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
@@ -98,12 +98,12 @@
             <div id="status-message" class="mt-4 text-center text-red-500 font-medium hidden"></div>
             <!-- モーダル代わりのメッセージボックス -->
             <div id="modal-message" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
-                <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-2xl transform transition-all" onclick="event.stopPropagation()">
+                <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-2xl transform transition-all">
                     <h3 class="text-lg font-bold text-gray-900 mb-3" id="modal-title"></h3>
                     <p class="text-sm text-gray-700 mb-4" id="modal-text"></p>
                     <div class = "text-center">
-                        <button id = "button-cancel" class="w-2/5 bg-gray-200 text-gray py-2 rounded-md inline-block" onclick="hideMessage()">CANCEL</button>
-                        <button id = "button-ok" class="w-2/5 bg-blue-600 text-white py-2 rounded-md inline-block hover:bg-blue-700 transition" onclick="hideMessage()">OK</button>
+                        <button id="button-cancel" type="button" class="w-2/5 bg-gray-200 text-gray py-2 rounded-md inline-block">CANCEL</button>
+                        <button id="button-ok" type="button" class="w-2/5 bg-blue-600 text-white py-2 rounded-md inline-block hover:bg-blue-700 transition">OK</button>
                     </div>
                 </div>
             </div>
@@ -136,157 +136,250 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script>
-        const scanButton = document.getElementById('scan-button');
-        const spotSelect = document.getElementById('spot-select');
-        const scanLogList = document.getElementById('scan-log-list');
-        const logTableCell = document.getElementsByClassName("log-table-cell");
-        const cameraToggle = document.getElementById('camera-toggle');
-        const cameraStatusText = document.getElementById('camera-status-text');
-        const cameraIcon = document.getElementById('camera-icon');
-        let isCameraOn = false;
-        const video = document.getElementById("camera-video");
-        const cameraCanvas = document.getElementById("camera-canvas");
-        const cameraCanvasCtx = cameraCanvas.getContext("2d");
-        let idCheckImage, idCanvasUpdate, idTimeout;
+        (function () {
+            'use strict';
 
-        window.showMessage = (title, text, yes = false, no = false) => {
-            document.getElementById('modal-title').textContent = title;
-            document.getElementById('modal-text').innerText = text;
-            document.getElementById('modal-message').classList.remove('hidden');
+            const API_URL = 'https://script.google.com/macros/s/AKfycbwtwPj6AJYXcEw0ZsG9Y-pDmmCBS8DaTjjpf1f36MS-RfHRqiB76B0RTspOtnPxNAitdQ/exec';
+            const VALID_SPOTS = new Set(['spot1', 'spot2', 'spot3', 'spot4', 'spot5', 'retire']);
+            const cameraToggle = document.getElementById('camera-toggle');
+            const scanButton = document.getElementById('scan-button');
+            const spotSelect = document.getElementById('spot-select');
+            const logTableCells = document.getElementsByClassName('log-table-cell');
+            const cameraStatusText = document.getElementById('camera-status-text');
+            const cameraIcon = document.getElementById('camera-icon');
+            const video = document.getElementById('camera-video');
+            const cameraCanvas = document.getElementById('camera-canvas');
+            const cameraCanvasCtx = cameraCanvas.getContext('2d');
+            const statusMessage = document.getElementById('status-message');
+            const modalMessage = document.getElementById('modal-message');
+            const modalTitle = document.getElementById('modal-title');
+            const modalText = document.getElementById('modal-text');
+            const buttonOk = document.getElementById('button-ok');
+            const buttonCancel = document.getElementById('button-cancel');
+            const modalDialog = modalMessage.querySelector(':scope > div');
 
-            const buttonOK = document.getElementById("button-ok");
-            const buttonCancel = document.getElementById("button-cancel");
-            if(!yes) {
-                buttonOK.classList.add("hidden");
-            } else if (!no) {
-                buttonCancel.classList.add("hidden");
+            let cameraStream = null;
+            let animationFrameId = null;
+            let checkFrameId = null;
+            let stopTimeoutId = null;
+            let modalResolve = null;
+
+            if (!cameraToggle || !scanButton || !spotSelect || !video || !cameraCanvas || !cameraCanvasCtx) {
+                console.warn('スクリプトの初期化に必要な要素が見つかりませんでした。');
+                return;
             }
 
-            return new Promise(resolve => {
-                buttonOK.addEventListener("click", e => resolve(true));
-                buttonCancel.addEventListener("click", e => resolve(false));
-            });
-        };
-
-        window.hideMessage = () => {
-            document.getElementById('modal-message').classList.add('hidden');
-            document.getElementById("button-ok").classList.remove("hidden");
-            document.getElementById("button-cancel").classList.remove("hidden");
-        };
-
-        cameraToggle.addEventListener("click", e => {
-            isCameraOn = !isCameraOn;
-
-            if(isCameraOn) {
-                startCamera();
-                cameraToggle.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
-                cameraToggle.classList.add('bg-red-50', 'text-red-600', 'border-red-200');
-                cameraStatusText.textContent = 'カメラを停止';
-                cameraIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>`;
-            } else {
-                stopCamera();
-                cameraToggle.classList.remove('bg-red-50', 'text-red-600', 'border-red-200');
-                cameraToggle.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
-                cameraStatusText.textContent = 'カメラ停止中';
-                cameraIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M15 10v4M4 7h1.599c.983 0 1.558.468 1.92 1.353l.974 2.292 2.628 6.13a.999.999 0 00.957.531h3.922c.571 0 1.05-.333 1.284-.816l1.242-2.483a.999.999 0 00-.181-1.298l-5.322-5.321a.999.999 0 00-.735-.294H4V7z" /></svg>`;
+            function pad(number) {
+                return String(number).padStart(2, '0');
             }
-        });
 
-        scanButton.addEventListener("click", e => cameraToggle.click());
+            function formatTime(date) {
+                return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+            }
 
-        async function sendData(serialNo, spot, time) {
-            const url = "https://script.google.com/macros/s/AKfycbwtwPj6AJYXcEw0ZsG9Y-pDmmCBS8DaTjjpf1f36MS-RfHRqiB76B0RTspOtnPxNAitdQ/exec"
+            function validateSpot(value) {
+                return VALID_SPOTS.has(value) ? value : 'spot1';
+            }
 
-            await fetch(url, {
-                method: "POST",
-                body: JSON.stringify({
-                  serialNo: serialNo,
-                  spot: spot,
-                  time: time,
-                }),
-            });
-        }
+            function setScanButtonVisible(visible) {
+                scanButton.style.visibility = visible ? "visible" : "hidden";
+            }
 
-        function startCamera() {
-            let videoWidth, videoHeight;
-            const cameraConfig = {
-                audio: false,
-                video: {
-                    facingMode: "environment",
-                },
-            };
+            function updateCameraButton(isOn) {
+                if (isOn) {
+                    cameraToggle.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+                    cameraToggle.classList.add('bg-red-50', 'text-red-600', 'border-red-200');
+                    cameraStatusText.textContent = 'カメラを停止';
+                    cameraIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+                } else {
+                    cameraToggle.classList.remove('bg-red-50', 'text-red-600', 'border-red-200');
+                    cameraToggle.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+                    cameraStatusText.textContent = 'カメラ停止中';
+                    cameraIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M15 10v4M4 7h1.599c.983 0 1.558.468 1.92 1.353l.974 2.292 2.628 6.13a.999.999 0 00.957.531h3.922c.571 0 1.05-.333 1.284-.816l1.242-2.483a.999.999 0 00-.181-1.298l-5.322-5.321a.999.999 0 00-.735-.294H4V7z" /></svg>';
+                }
+            }
 
-            navigator.mediaDevices.getUserMedia(cameraConfig)
-                .then(stream => {
-                    video.srcObject = stream;
-                    video.onloadeddata = () => {
-                        scanButton.classList.remove("visible");
-                        scanButton.classList.add("invisible");
-                        videoWidth = video.clientWidth;
-                        videoHeight = video.clientHeight;
-                        video.play();
-                        canvasUpdate();
-                        checkImage();
-                        idTimeout = setTimeout(stopCamera, 1000 * 60); // インターバルは1分
-                    }
-                }).catch(e => {
-                    showMessage("ERROR!", "カメラの起動に失敗しました。\n詳しくはコンソールを確認してください。", yes = true);
-                    console.error(e);
+            function showStatus(message, type = 'error') {
+                statusMessage.textContent = message;
+                statusMessage.classList.remove('hidden', 'text-red-500', 'text-green-600', 'text-gray-500');
+                statusMessage.classList.add(type === 'success' ? 'text-green-600' : type === 'processing' ? 'text-gray-500' : 'text-red-500');
+            }
+
+            function hideStatus() {
+                statusMessage.textContent = '';
+                statusMessage.classList.add('hidden');
+            }
+
+            function showMessage(title, text, options = {}) {
+                modalTitle.textContent = title;
+                modalText.textContent = text;
+                buttonOk.hidden = options.showOk === false;
+                buttonCancel.hidden = options.showCancel !== true;
+                modalMessage.classList.remove('hidden');
+
+                return new Promise(resolve => {
+                    modalResolve = resolve;
                 });
-
-            const canvasUpdate = () => {
-                cameraCanvas.width = videoWidth;
-                cameraCanvas.height = videoHeight;
-                cameraCanvasCtx.drawImage(video, 0, 0, videoWidth, videoHeight);
-                idCanvasUpdate = requestAnimationFrame(canvasUpdate);
             }
 
-            const checkImage = async () => {
-                const image = cameraCanvasCtx.getImageData(0, 0, videoWidth, videoHeight);
-                const code = jsQR(image.data, videoWidth, videoHeight);
-                const spot = spotSelect.value;
-                const date = new Date();
-                const time = `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}`;
+            function hideMessage(result = false) {
+                modalMessage.classList.add('hidden');
+                buttonOk.hidden = false;
+                buttonCancel.hidden = false;
 
-                if(code) {
-                    clearTimeout(idTimeout);
-                    idTimeout = setTimeout(stopCamera, 1000 * 60);
+                if (typeof modalResolve === 'function') {
+                    modalResolve(result);
+                    modalResolve = null;
+                }
+            }
 
-                    const text = `以下の内容で送信します。よろしいですか？\n\n整理番号: ${code.data}\nスポット: ${spot}`;
+            function clearCameraCanvas() {
+                cameraCanvasCtx.clearRect(0, 0, cameraCanvas.width, cameraCanvas.height);
+            }
 
-                    await showMessage("SCAN RESULT", text, yes = true, no = true)
-                        .then(appr => {
-                            console.log(appr);
-                            if(appr) {
-                                console.log("送信");
-                                sendData(code.data, spot, time);
-
-                                logTableCell[0].innerText = code.data;
-                                logTableCell[1].innerText = spot;
-                                logTableCell[2].innerText = time;
-                            } else {
-                                console.log("CANCEL");
-                            }
-                        })
+            function stopCamera() {
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
                 }
 
-                idCheckImage = requestAnimationFrame(checkImage);
+                if (checkFrameId) {
+                    cancelAnimationFrame(checkFrameId);
+                    checkFrameId = null;
+                }
+
+                if (stopTimeoutId) {
+                    clearTimeout(stopTimeoutId);
+                    stopTimeoutId = null;
+                }
+
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                    cameraStream = null;
+                }
+
+                video.pause();
+                clearCameraCanvas();
+                setScanButtonVisible(true);
+                updateCameraButton(false);
+                hideStatus();
             }
-        }
 
-        function stopCamera() {
-            cancelAnimationFrame(idCanvasUpdate);
-            cancelAnimationFrame(idCheckImage);
-            video.pause();
-            clearCameraCanvas();
-            scanButton.classList.remove("invisible");
-            scanButton.classList.add("visible");
-        }
+            async function sendData(serialNo, spot, time) {
+                const payload = {
+                    serialNo: String(serialNo || ''),
+                    spot: validateSpot(spot),
+                    time: String(time || ''),
+                };
 
-        function clearCameraCanvas() {
-            cameraCanvasCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
-            // rectCtx.clearRect(0, 0, video.clientWidth, video.clientHeight);
-        }
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`通信エラー: ${response.status}`);
+                }
+
+                return response;
+            }
+
+            function updateLogTable(serialNo, spot, time) {
+                if (logTableCells.length < 3) {
+                    return;
+                }
+
+                logTableCells[0].textContent = String(serialNo || '-');
+                logTableCells[1].textContent = String(spot || '-');
+                logTableCells[2].textContent = String(time || '-');
+            }
+
+            function drawVideoFrame() {
+                if (video.videoWidth === 0 || video.videoHeight === 0) {
+                    animationFrameId = requestAnimationFrame(drawVideoFrame);
+                    return;
+                }
+
+                cameraCanvas.width = video.videoWidth;
+                cameraCanvas.height = video.videoHeight;
+                cameraCanvasCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+                animationFrameId = requestAnimationFrame(drawVideoFrame);
+            }
+
+            async function checkQrFrame() {
+                if (cameraCanvas.width === 0 || cameraCanvas.height === 0) {
+                    checkFrameId = requestAnimationFrame(checkQrFrame);
+                    return;
+                }
+
+                const imageData = cameraCanvasCtx.getImageData(0, 0, cameraCanvas.width, cameraCanvas.height);
+                const code = jsQR(imageData.data, cameraCanvas.width, cameraCanvas.height);
+
+                if (code && code.data) {
+                    clearTimeout(stopTimeoutId);
+                    stopTimeoutId = setTimeout(stopCamera, 1000 * 60);
+
+                    const spot = validateSpot(spotSelect.value);
+                    const time = formatTime(new Date());
+                    const text = `以下の内容で送信します。よろしいですか？\n\n整理番号: ${code.data}\nスポット: ${spot}`;
+                    const confirmed = await showMessage('SCAN RESULT', text, { showOk: true, showCancel: true });
+
+                    if (confirmed) {
+                        try {
+                            showStatus('送信中...', 'processing');
+                            await sendData(code.data, spot, time);
+                            updateLogTable(code.data, spot, time);
+                            showStatus('送信が完了しました。', 'success');
+                        } catch (error) {
+                            console.error(error);
+                            showStatus('送信に失敗しました。', 'error');
+                        }
+                    }
+                }
+
+                checkFrameId = requestAnimationFrame(checkQrFrame);
+            }
+
+            async function startCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: false,
+                        video: { facingMode: 'environment' },
+                    });
+
+                    cameraStream = stream;
+                    video.srcObject = stream;
+                    await video.play();
+
+                    setScanButtonVisible(false);
+                    updateCameraButton(true);
+                    hideStatus();
+
+                    animationFrameId = requestAnimationFrame(drawVideoFrame);
+                    checkFrameId = requestAnimationFrame(checkQrFrame);
+                    stopTimeoutId = setTimeout(stopCamera, 1000 * 60);
+                } catch (error) {
+                    console.error(error);
+                    showStatus('カメラの起動に失敗しました。', 'error');
+                }
+            }
+
+            cameraToggle.addEventListener('click', () => {
+                if (cameraStream) {
+                    stopCamera();
+                } else {
+                    startCamera();
+                }
+            });
+
+            scanButton.addEventListener('click', () => cameraToggle.click());
+            buttonOk.addEventListener('click', () => hideMessage(true));
+            buttonCancel.addEventListener('click', () => hideMessage(false));
+            modalMessage.addEventListener('click', () => hideMessage(false));
+            if (modalDialog) {
+                modalDialog.addEventListener('click', event => event.stopPropagation());
+            }
+        })();
     </script>
 </body>
 </html>
