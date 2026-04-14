@@ -201,8 +201,11 @@
 
             function showStatus(message, type = 'error') {
                 statusMessage.textContent = message;
-                statusMessage.classList.remove('hidden', 'text-red-500', 'text-green-600', 'text-gray-500');
-                statusMessage.classList.add(type === 'success' ? 'text-green-600' : type === 'processing' ? 'text-gray-500' : 'text-red-500');
+                statusMessage.classList.remove('hidden', 'text-red-500', 'text-green-600', 'text-gray-500', 'text-black-500');
+                statusMessage.classList.add(type === 'success' ? 'text-green-600' : 
+                                            type === 'processing' ? 'text-gray-500' : 
+                                            type === 'error' ? 'text-red-500' :
+                                            'text-black-500');
             }
 
             function hideStatus() {
