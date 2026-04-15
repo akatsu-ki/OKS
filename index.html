@@ -215,7 +215,7 @@
 
             function showMessage(title, text, options = {}) {
                 modalTitle.textContent = title;
-                modalText.textContent = text;
+                modalText.innerText = text;
                 buttonOk.hidden = options.showOk === false;
                 buttonCancel.hidden = options.showCancel !== true;
                 modalMessage.classList.remove('hidden');
