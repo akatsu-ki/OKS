@@ -9,6 +9,10 @@
     <!-- Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
+        html {
+            overscroll-behavior: none;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f7f9fb;
@@ -215,7 +219,7 @@
 
             function showMessage(title, text, options = {}) {
                 modalTitle.textContent = title;
-                modalText.textContent = text;
+                modalText.innerText = text;
                 buttonOk.hidden = options.showOk === false;
                 buttonCancel.hidden = options.showCancel !== true;
                 modalMessage.classList.remove('hidden');
