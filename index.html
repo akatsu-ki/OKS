@@ -369,7 +369,7 @@
                 } catch (error) {
                     console.error(error);
                     showStatus('カメラの起動に失敗しました。', 'error');
-                    alert(error.message);
+                    alert(`ERROR: ${error.message}`);
                 }
             }
 
